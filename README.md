@@ -179,8 +179,9 @@ pytest --cov=src tests/
 如有问题或建议，请通过以下方式联系：
 
 - 提交 Issue: [GitHub Issues](https://github.com/yourusername/DRL-d/issues)
-- 邮箱: your.email@example.com
+- 邮箱: naura_ic_warriors@163.com
 
 ---
+
 
 ⭐ 如果这个项目对您有帮助，请给我们一个星标！
