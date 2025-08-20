@@ -1,0 +1,778 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>强化学习可视化分析工具</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #334155 100%);
+            color: #f1f5f9;
+            min-height: 100vh;
+            overflow-x: auto;
+        }
+
+        .container {
+            max-width: 1800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            padding: 20px;
+            background: linear-gradient(135deg, #1e293b, #334155);
+            border-radius: 15px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(148, 163, 184, 0.2);
+        }
+
+        .header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            background: linear-gradient(135deg, #00d4ff, #0ea5e9);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .header p {
+            font-size: 1.1rem;
+            color: #cbd5e1;
+            margin-bottom: 20px;
+        }
+
+        .status-bar {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 20px;
+            flex-wrap: wrap;
+        }
+
+        .status-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 16px;
+            background: rgba(30, 41, 59, 0.6);
+            border-radius: 20px;
+            border: 1px solid rgba(148, 163, 184, 0.2);
+        }
+
+        .status-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+
+        .status-active {
+            background: #10b981;
+            box-shadow: 0 0 10px rgba(16, 185, 129, 0.5);
+        }
+
+        .status-inactive {
+            background: #ef4444;
+            box-shadow: 0 0 10px rgba(239, 68, 68, 0.5);
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .controls {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            margin-bottom: 30px;
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+            color: white;
+        }
+
+        .btn-primary:hover:not(:disabled) {
+            background: linear-gradient(135deg, #2563eb, #1e40af);
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(59, 130, 246, 0.4);
+        }
+
+        .btn-danger {
+            background: linear-gradient(135deg, #ef4444, #dc2626);
+            color: white;
+        }
+
+        .btn-danger:hover:not(:disabled) {
+            background: linear-gradient(135deg, #dc2626, #b91c1c);
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(239, 68, 68, 0.4);
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .frequency-control {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 16px;
+            background: rgba(30, 41, 59, 0.6);
+            border-radius: 8px;
+            border: 1px solid rgba(148, 163, 184, 0.2);
+        }
+
+        .frequency-control input {
+            background: rgba(51, 65, 85, 0.8);
+            border: 1px solid rgba(148, 163, 184, 0.3);
+            border-radius: 4px;
+            color: #f1f5f9;
+            padding: 4px 8px;
+            width: 80px;
+        }
+
+        .file-upload {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .file-upload input[type="file"] {
+            display: none;
+        }
+
+        .file-upload label {
+            padding: 8px 16px;
+            background: linear-gradient(135deg, #10b981, #059669);
+            color: white;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.3s ease;
+        }
+
+        .file-upload label:hover {
+            background: linear-gradient(135deg, #059669, #047857);
+            transform: translateY(-1px);
+        }
+
+        .main-content {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 30px;
+            margin-bottom: 30px;
+        }
+
+        .physics-section {
+            display: grid;
+            grid-template-columns: 1fr 300px;
+            gap: 20px;
+            align-items: start;
+        }
+
+        .physics-container {
+            background: linear-gradient(135deg, #1e293b, #334155);
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(148, 163, 184, 0.2);
+        }
+
+        .physics-title {
+            font-size: 1.5rem;
+            margin-bottom: 20px;
+            text-align: center;
+            color: #00d4ff;
+            font-weight: 600;
+        }
+
+        .fab-layout {
+            position: relative;
+            width: 600px;
+            height: 500px;
+            margin: 0 auto;
+            background: radial-gradient(circle at center, #0f172a, #1e293b);
+            border-radius: 20px;
+            border: 2px solid rgba(0, 212, 255, 0.3);
+            overflow: hidden;
+        }
+
+        /* TM模块样式 */
+        .tm-module {
+            position: absolute;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 14px;
+            color: white;
+            border-radius: 15px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+            transition: all 0.3s ease;
+        }
+
+        .tm1 {
+            top: 50px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 120px;
+            height: 60px;
+            background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+            border: 2px solid #60a5fa;
+        }
+
+        .tm2 {
+            top: 150px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 150px;
+            height: 150px;
+            background: linear-gradient(135deg, #ef4444, #dc2626);
+            border: 2px solid #f87171;
+            clip-path: polygon(30% 0%, 70% 0%, 100% 30%, 100% 70%, 70% 100%, 30% 100%, 0% 70%, 0% 30%);
+        }
+
+        .tm3 {
+            bottom: 50px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 150px;
+            height: 150px;
+            background: linear-gradient(135deg, #10b981, #059669);
+            border: 2px solid #34d399;
+            clip-path: polygon(30% 0%, 70% 0%, 100% 30%, 100% 70%, 70% 100%, 30% 100%, 0% 70%, 0% 30%);
+        }
+
+        /* 腔室样式 */
+        .chamber {
+            position: absolute;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 10px;
+            font-weight: bold;
+            color: white;
+            transition: all 0.3s ease;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            cursor: pointer;
+        }
+
+        .chamber:hover {
+            transform: scale(1.1);
+            box-shadow: 0 0 20px rgba(255, 255, 255, 0.5);
+        }
+
+        /* TM2周围的腔室 - 正八边形布局 */
+        #lla { top: 80px; left: 200px; }
+        #llb { top: 80px; right: 200px; }
+        #pm7 { top: 120px; right: 150px; }
+        #pm8 { top: 180px; right: 120px; }
+        #pm9 { top: 240px; right: 150px; }
+        #pm10 { top: 280px; right: 200px; }
+        #llc1 { top: 280px; left: 200px; }
+        #lld1 { top: 240px; left: 150px; }
+
+        /* TM3周围的腔室 - 正八边形布局 */
+        #llc2 { bottom: 180px; left: 200px; }
+        #lld2 { bottom: 180px; right: 200px; }
+        #pm1 { bottom: 140px; right: 150px; }
+        #pm2 { bottom: 80px; right: 120px; }
+        #pm3 { bottom: 40px; right: 150px; }
+        #pm4 { bottom: 0px; right: 200px; }
+        #pm5 { bottom: 0px; left: 200px; }
+        #pm6 { bottom: 40px; left: 150px; }
+
+        /* 腔室状态颜色 */
+        .chamber-idle {
+            background: linear-gradient(135deg, #64748b, #475569);
+        }
+
+        .chamber-processing {
+            background: linear-gradient(135deg, #f59e0b, #d97706);
+            animation: processing 2s infinite;
+        }
+
+        .chamber-loading {
+            background: linear-gradient(135deg, #06b6d4, #0891b2);
+            animation: loading 1.5s infinite;
+        }
+
+        .chamber-unloading {
+            background: linear-gradient(135deg, #8b5cf6, #7c3aed);
+            animation: unloading 1.5s infinite;
+        }
+
+        @keyframes processing {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+        }
+
+        @keyframes loading {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.6; }
+        }
+
+        @keyframes unloading {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+
+        /* 机械臂样式 */
+        .robot-arm {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 80px;
+            height: 4px;
+            background: linear-gradient(90deg, #f59e0b, #d97706);
+            transform-origin: center;
+            border-radius: 2px;
+            box-shadow: 0 0 10px rgba(245, 158, 11, 0.5);
+            animation: rotate 8s linear infinite;
+        }
+
+        .robot-arm::before {
+            content: '';
+            position: absolute;
+            top: -6px;
+            right: -8px;
+            width: 16px;
+            height: 16px;
+            background: radial-gradient(circle, #f59e0b, #d97706);
+            border-radius: 50%;
+            box-shadow: 0 0 8px rgba(245, 158, 11, 0.7);
+        }
+
+        .robot-arm::after {
+            content: '';
+            position: absolute;
+            top: -6px;
+            left: -8px;
+            width: 16px;
+            height: 16px;
+            background: radial-gradient(circle, #f59e0b, #d97706);
+            border-radius: 50%;
+            box-shadow: 0 0 8px rgba(245, 158, 11, 0.7);
+        }
+
+        @keyframes rotate {
+            from { transform: translate(-50%, -50%) rotate(0deg); }
+            to { transform: translate(-50%, -50%) rotate(360deg); }
+        }
+
+        /* 晶圆样式 */
+        .wafer {
+            position: absolute;
+            width: 20px;
+            height: 20px;
+            background: radial-gradient(circle, #e2e8f0, #cbd5e1);
+            border-radius: 50%;
+            border: 2px solid #94a3b8;
+            animation: wafer-glow 3s ease-in-out infinite;
+            z-index: 10;
+        }
+
+        @keyframes wafer-glow {
+            0%, 100% { box-shadow: 0 0 5px rgba(226, 232, 240, 0.5); }
+            50% { box-shadow: 0 0 15px rgba(226, 232, 240, 0.8); }
+        }
+
+        /* 状态面板 */
+        .status-panel {
+            margin-top: 20px;
+            padding: 15px;
+            background: rgba(30, 41, 59, 0.6);
+            border-radius: 10px;
+            border: 1px solid rgba(148, 163, 184, 0.2);
+        }
+
+        .status-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+            font-size: 14px;
+        }
+
+        .status-row:last-child {
+            margin-bottom: 0;
+        }
+
+        .status-row span {
+            color: #cbd5e1;
+        }
+
+        .status-row span span {
+            color: #00d4ff;
+            font-weight: bold;
+        }
+
+        /* 图例面板 */
+        .legend-panel {
+            background: linear-gradient(135deg, #1e293b, #334155);
+            border-radius: 15px;
+            padding: 20px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(148, 163, 184, 0.2);
+            height: fit-content;
+        }
+
+        .legend-title {
+            font-size: 1.3rem;
+            font-weight: 600;
+            margin-bottom: 20px;
+            text-align: center;
+            color: #00d4ff;
+        }
+
+        .legend-section {
+            margin-bottom: 20px;
+        }
+
+        .legend-section:last-child {
+            margin-bottom: 0;
+        }
+
+        .legend-section h3 {
+            font-size: 1rem;
+            margin-bottom: 10px;
+            color: #f1f5f9;
+            border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+            padding-bottom: 5px;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 8px;
+            padding: 5px;
+            border-radius: 5px;
+            transition: background-color 0.2s ease;
+        }
+
+        .legend-item:hover {
+            background: rgba(51, 65, 85, 0.3);
+        }
+
+        .legend-color {
+            width: 20px;
+            height: 20px;
+            border-radius: 4px;
+            border: 1px solid rgba(148, 163, 184, 0.3);
+        }
+
+        .legend-text {
+            font-size: 13px;
+            color: #cbd5e1;
+        }
+
+        /* 图表区域 */
+        .charts-grid {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .chart-container {
+            background: linear-gradient(135deg, #1e293b, #334155);
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(148, 163, 184, 0.2);
+            height: 400px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .chart-title {
+            font-size: 1.3rem;
+            font-weight: 600;
+            margin-bottom: 20px;
+            text-align: center;
+            color: #00d4ff;
+        }
+
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 20px;
+        }
+
+        .metric-card {
+            background: linear-gradient(135deg, #1e293b, #334155);
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(148, 163, 184, 0.2);
+            height: 350px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* 响应式设计 */
+        @media (max-width: 1400px) {
+            .physics-section {
+                grid-template-columns: 1fr;
+            }
+            
+            .legend-panel {
+                order: -1;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 10px;
+            }
+            
+            .header h1 {
+                font-size: 2rem;
+            }
+            
+            .fab-layout {
+                width: 100%;
+                max-width: 500px;
+                height: 400px;
+            }
+            
+            .controls {
+                flex-direction: column;
+                align-items: center;
+            }
+            
+            .metrics-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        /* 连接线样式 */
+        .connection-line {
+            position: absolute;
+            background: linear-gradient(90deg, rgba(0, 212, 255, 0.6), rgba(0, 212, 255, 0.2));
+            height: 2px;
+            z-index: 1;
+        }
+
+        /* TM2到LLC/D的连接线 */
+        .tm2-llc-line {
+            top: 225px;
+            left: 225px;
+            width: 50px;
+            transform: rotate(-45deg);
+        }
+
+        .tm2-lld-line {
+            top: 225px;
+            right: 225px;
+            width: 50px;
+            transform: rotate(45deg);
+        }
+
+        /* TM3到LLC/D的连接线 */
+        .tm3-llc-line {
+            bottom: 225px;
+            left: 225px;
+            width: 50px;
+            transform: rotate(45deg);
+        }
+
+        .tm3-lld-line {
+            bottom: 225px;
+            right: 225px;
+            width: 50px;
+            transform: rotate(-45deg);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🚀 强化学习可视化分析工具</h1>
+            <p>实时监控TM1-TM2-TM3半导体制造系统的强化学习训练过程</p>
+            
+            <div class="status-bar">
+                <div class="status-item">
+                    <div id="statusIndicator" class="status-indicator status-inactive"></div>
+                    <span id="statusText">未连接</span>
+                </div>
+                <div class="status-item">
+                    <span>📊 数据更新频率: <span id="frequencyDisplay">10 Hz</span></span>
+                </div>
+                <div class="status-item">
+                    <span>⏱️ 运行时间: <span id="runTime">00:00:00</span></span>
+                </div>
+            </div>
+        </div>
+
+        <div class="controls">
+            <button id="startBtn" class="btn btn-primary" onclick="startMonitoring()">▶️ 开始监控</button>
+            <button id="stopBtn" class="btn btn-danger" onclick="stopMonitoring()">⏹️ 停止监控</button>
+            
+            <div class="frequency-control">
+                <label>更新频率:</label>
+                <input type="range" min="1" max="60" value="10" onchange="updateFrequency(this.value)">
+                <span>Hz</span>
+            </div>
+            
+            <div class="file-upload">
+                <input type="file" id="fileInput" accept=".json">
+                <label for="fileInput">📁 加载历史数据</label>
+                <button class="btn btn-primary" onclick="loadHistoryData()">上传</button>
+            </div>
+        </div>
+
+        <div class="main-content">
+            <div class="chart-container">
+                <div class="chart-title">📈 强化学习训练曲线</div>
+                <canvas id="trainingChart" style="flex: 1;"></canvas>
+            </div>
+        </div>
+
+        <div class="physics-section">
+            <div class="physics-container">
+                <div class="physics-title">🏭 TM1-TM2-TM3 物理模型</div>
+                
+                <div id="fabLayout" class="fab-layout">
+                    <!-- TM模块 -->
+                    <div class="tm-module tm1">TM1<br>晶圆源</div>
+                    <div class="tm-module tm2">
+                        TM2<br>传输模块
+                        <div id="tm2Arm" class="robot-arm"></div>
+                    </div>
+                    <div class="tm-module tm3">
+                        TM3<br>处理模块
+                        <div id="tm3Arm" class="robot-arm"></div>
+                    </div>
+
+                    <!-- TM2周围的腔室 (正八边形布局) -->
+                    <div id="lla" class="chamber chamber-idle" title="LLA - 装载锁定A">LLA</div>
+                    <div id="llb" class="chamber chamber-idle" title="LLB - 装载锁定B">LLB</div>
+                    <div id="pm7" class="chamber chamber-processing" title="PM7 - 处理腔室7">PM7</div>
+                    <div id="pm8" class="chamber chamber-idle" title="PM8 - 处理腔室8">PM8</div>
+                    <div id="pm9" class="chamber chamber-loading" title="PM9 - 处理腔室9">PM9</div>
+                    <div id="pm10" class="chamber chamber-idle" title="PM10 - 处理腔室10">PM10</div>
+                    <div id="llc1" class="chamber chamber-idle" title="LLC - 传输锁定C">LLC</div>
+                    <div id="lld1" class="chamber chamber-idle" title="LLD - 传输锁定D">LLD</div>
+
+                    <!-- TM3周围的腔室 (正八边形布局) -->
+                    <div id="llc2" class="chamber chamber-idle" title="LLC - 传输锁定C">LLC</div>
+                    <div id="lld2" class="chamber chamber-idle" title="LLD - 传输锁定D">LLD</div>
+                    <div id="pm1" class="chamber chamber-processing" title="PM1 - 处理腔室1">PM1</div>
+                    <div id="pm2" class="chamber chamber-idle" title="PM2 - 处理腔室2">PM2</div>
+                    <div id="pm3" class="chamber chamber-unloading" title="PM3 - 处理腔室3">PM3</div>
+                    <div id="pm4" class="chamber chamber-idle" title="PM4 - 处理腔室4">PM4</div>
+                    <div id="pm5" class="chamber chamber-processing" title="PM5 - 处理腔室5">PM5</div>
+                    <div id="pm6" class="chamber chamber-idle" title="PM6 - 处理腔室6">PM6</div>
+
+                    <!-- 连接线 -->
+                    <div class="connection-line tm2-llc-line"></div>
+                    <div class="connection-line tm2-lld-line"></div>
+                    <div class="connection-line tm3-llc-line"></div>
+                    <div class="connection-line tm3-lld-line"></div>
+
+                    <!-- 状态面板 -->
+                    <div class="status-panel">
+                        <div class="status-row">
+                            <span>TM2 机械臂角度: <span id="tm2Angle">0°</span></span>
+                            <span>TM3 机械臂角度: <span id="tm3Angle">180°</span></span>
+                        </div>
+                        <div class="status-row">
+                            <span>活跃晶圆数: <span id="activeWafers">0</span></span>
+                            <span>处理中腔室: <span id="processingChambers">0</span></span>
+                        </div>
+                        <div class="status-row">
+                            <span>系统状态: <span id="systemStatus">待机</span></span>
+                            <span>吞吐量: <span id="throughput">0 WPH</span></span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="legend-panel">
+                <div class="legend-title">📋 图例说明</div>
+                
+                <div class="legend-section">
+                    <h3>🏭 传输模块</h3>
+                    <div class="legend-item">
+                        <div class="legend-color" style="background: linear-gradient(135deg, #3b82f6, #1d4ed8);"></div>
+                        <div class="legend-text">TM1 - 晶圆源</div>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-color" style="background: linear-gradient(135deg, #ef4444, #dc2626);"></div>
+                        <div class="legend-text">TM2 - 传输模块</div>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-color" style="background: linear-gradient(135deg, #10b981, #059669);"></div>
+                        <div class="legend-text">TM3 - 处理模块</div>
+                    </div>
+                </div>
+
+                <div class="legend-section">
+                    <h3>🔄 腔室状态</h3>
+                    <div class="legend-item">
+                        <div class="legend-color chamber-idle"></div>
+                        <div class="legend-text">空闲状态</div>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-color chamber-processing"></div>
+                        <div class="legend-text">处理中</div>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-color chamber-loading"></div>
+                        <div class="legend-text">装载中</div>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-color chamber-unloading"></div>
+                        <div class="legend-text">卸载中</div>
+                    </div>
+                </div>
+
+                <div class="legend-section">
+                    <h3>🔗 连接腔室</h3>
+                    <div class="legend-item">
+                        <div class="legend-text">LLA/LLB - 装载锁定</div>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-text">LLC/LLD - 传输锁定</div>
+                    </div>
+                </div>
+
+                <div class="legend-section">
+                    <h3>⚙️ 处理腔室</h3>
+                    <div class="legend-item">
+                        <div class="legend-text">PM1-PM6 - TM3处理腔室</div>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-

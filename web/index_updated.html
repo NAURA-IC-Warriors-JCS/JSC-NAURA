@@ -1,0 +1,756 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>强化学习实时可视化分析工具</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', 'Microsoft YaHei', 'Segoe UI', system-ui, sans-serif;
+            background: linear-gradient(135deg, #0f0f23 0%, #1a1a2e 25%, #16213e 50%, #0f3460 100%);
+            min-height: 100vh;
+            color: #e8eaed;
+            overflow-x: hidden;
+        }
+
+        .container {
+            max-width: 1800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .header {
+            text-align: center;
+            color: #ffffff;
+            margin-bottom: 30px;
+            position: relative;
+        }
+
+        .header::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 200px;
+            height: 2px;
+            background: linear-gradient(90deg, transparent, #00d4ff, transparent);
+        }
+
+        .header h1 {
+            font-size: 3.2em;
+            margin-bottom: 15px;
+            text-shadow: 0 0 20px rgba(0, 212, 255, 0.3);
+            font-weight: 800;
+            background: linear-gradient(135deg, #00d4ff, #7c3aed, #f59e0b);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .header p {
+            font-size: 1.2em;
+            opacity: 0.9;
+            color: #a1a1aa;
+        }
+
+        .control-panel {
+            background: linear-gradient(135deg, rgba(30, 41, 59, 0.95), rgba(51, 65, 85, 0.95));
+            border-radius: 24px;
+            padding: 30px;
+            margin-bottom: 30px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(148, 163, 184, 0.2);
+        }
+
+        .control-row {
+            display: flex;
+            align-items: center;
+            gap: 30px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+
+        .control-group {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .btn {
+            padding: 14px 28px;
+            border: none;
+            border-radius: 12px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            box-shadow: 0 8px 25px rgba(0,0,0,0.2);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .btn::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+            transition: left 0.5s;
+        }
+
+        .btn:hover::before {
+            left: 100%;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #10b981, #059669);
+            color: white;
+            border: 1px solid rgba(16, 185, 129, 0.3);
+        }
+
+        .btn-danger {
+            background: linear-gradient(135deg, #ef4444, #dc2626);
+            color: white;
+            border: 1px solid rgba(239, 68, 68, 0.3);
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 12px 35px rgba(0,0,0,0.3);
+        }
+
+        .input-field {
+            padding: 12px 18px;
+            border: 2px solid rgba(148, 163, 184, 0.3);
+            border-radius: 10px;
+            font-size: 14px;
+            background: rgba(30, 41, 59, 0.8);
+            color: #e8eaed;
+            transition: all 0.3s ease;
+        }
+
+        .input-field:focus {
+            outline: none;
+            border-color: #00d4ff;
+            box-shadow: 0 0 0 3px rgba(0, 212, 255, 0.1);
+        }
+
+        .status-indicator {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            margin-right: 12px;
+            position: relative;
+        }
+
+        .status-active {
+            background: #10b981;
+            animation: pulse 2s infinite;
+            box-shadow: 0 0 10px rgba(16, 185, 129, 0.5);
+        }
+
+        .status-inactive {
+            background: #ef4444;
+            box-shadow: 0 0 10px rgba(239, 68, 68, 0.5);
+        }
+
+        @keyframes pulse {
+            0% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.7; transform: scale(1.1); }
+            100% { opacity: 1; transform: scale(1); }
+        }
+
+        .dashboard {
+            display: grid;
+            grid-template-columns: 1fr 2fr 0.6fr;
+            gap: 30px;
+            margin-bottom: 30px;
+            min-height: 700px;
+        }
+
+        .chart-container {
+            background: linear-gradient(135deg, rgba(30, 41, 59, 0.95), rgba(51, 65, 85, 0.95));
+            border-radius: 24px;
+            padding: 30px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(148, 163, 184, 0.2);
+            height: 700px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .chart-title {
+            font-size: 1.6em;
+            font-weight: 700;
+            margin-bottom: 25px;
+            color: #ffffff;
+            text-align: center;
+            background: linear-gradient(135deg, #00d4ff, #7c3aed);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .physics-model {
+            background: linear-gradient(135deg, rgba(30, 41, 59, 0.95), rgba(51, 65, 85, 0.95));
+            border-radius: 24px;
+            padding: 30px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(148, 163, 184, 0.2);
+            position: relative;
+            overflow: hidden;
+            height: 700px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .legend-panel {
+            background: linear-gradient(135deg, rgba(30, 41, 59, 0.95), rgba(51, 65, 85, 0.95));
+            border-radius: 24px;
+            padding: 30px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(148, 163, 184, 0.2);
+            height: 700px;
+            overflow-y: auto;
+        }
+
+        .fab-layout {
+            width: 100%;
+            height: 600px;
+            position: relative;
+            background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+            border-radius: 20px;
+            border: 2px solid rgba(148, 163, 184, 0.3);
+            overflow: hidden;
+        }
+
+        /* TM1 - 晶圆源 */
+        .tm1-container {
+            position: absolute;
+            left: 30px;
+            top: 50%;
+            transform: translateY(-50%);
+            text-align: center;
+        }
+
+        .tm1 {
+            width: 80px;
+            height: 80px;
+            background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+            border-radius: 16px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: 700;
+            font-size: 12px;
+            box-shadow: 0 8px 25px rgba(59, 130, 246, 0.4);
+            border: 2px solid rgba(59, 130, 246, 0.5);
+        }
+
+        /* TM2 - 正八边形 */
+        .tm2-container {
+            position: absolute;
+            left: 200px;
+            top: 50%;
+            transform: translateY(-50%);
+        }
+
+        .tm2-octagon {
+            width: 160px;
+            height: 160px;
+            background: linear-gradient(135deg, #ef4444, #dc2626);
+            clip-path: polygon(30% 0%, 70% 0%, 100% 30%, 100% 70%, 70% 100%, 30% 100%, 0% 70%, 0% 30%);
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 12px 35px rgba(239, 68, 68, 0.4);
+        }
+
+        .tm2-center {
+            color: white;
+            font-weight: 700;
+            font-size: 14px;
+            text-align: center;
+            z-index: 10;
+        }
+
+        .tm2-robot {
+            position: absolute;
+            width: 100px;
+            height: 100px;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+        }
+
+        .dual-arm {
+            position: absolute;
+            width: 80px;
+            height: 4px;
+            background: linear-gradient(90deg, #f59e0b, #d97706);
+            top: 50%;
+            left: 50%;
+            transform-origin: center;
+            border-radius: 2px;
+            box-shadow: 0 0 15px rgba(245, 158, 11, 0.6);
+        }
+
+        .dual-arm::before {
+            content: '';
+            position: absolute;
+            width: 80px;
+            height: 4px;
+            background: linear-gradient(90deg, #f59e0b, #d97706);
+            top: 0;
+            left: 0;
+            transform: rotate(180deg);
+            border-radius: 2px;
+        }
+
+        /* TM3 - 正八边形 */
+        .tm3-container {
+            position: absolute;
+            right: 30px;
+            top: 50%;
+            transform: translateY(-50%);
+        }
+
+        .tm3-octagon {
+            width: 160px;
+            height: 160px;
+            background: linear-gradient(135deg, #10b981, #059669);
+            clip-path: polygon(30% 0%, 70% 0%, 100% 30%, 100% 70%, 70% 100%, 30% 100%, 0% 70%, 0% 30%);
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 12px 35px rgba(16, 185, 129, 0.4);
+        }
+
+        .tm3-center {
+            color: white;
+            font-weight: 700;
+            font-size: 14px;
+            text-align: center;
+            z-index: 10;
+        }
+
+        .tm3-robot {
+            position: absolute;
+            width: 100px;
+            height: 100px;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+        }
+
+        /* 连接线 */
+        .connection-line {
+            position: absolute;
+            height: 4px;
+            background: linear-gradient(90deg, #6b7280, #4b5563);
+            top: 50%;
+            transform: translateY(-50%);
+            border-radius: 2px;
+            box-shadow: 0 4px 12px rgba(107, 114, 128, 0.3);
+        }
+
+        .lla-llb-line {
+            left: 110px;
+            width: 90px;
+        }
+
+        .llc-lld-line {
+            left: 360px;
+            width: 90px;
+        }
+
+        /* 腔室 - 统一圆形设计 */
+        .chamber {
+            position: absolute;
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 9px;
+            font-weight: 700;
+            color: white;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
+            transition: all 0.3s ease;
+            cursor: pointer;
+            border: 2px solid rgba(255,255,255,0.2);
+        }
+
+        .chamber:hover {
+            transform: scale(1.2);
+            box-shadow: 0 8px 25px rgba(0,0,0,0.4);
+        }
+
+        /* TM2周围的腔室位置 (正八边形顶点) */
+        .tm2-lla { top: -16px; left: 64px; }
+        .tm2-llb { top: 16px; right: -16px; }
+        .tm2-pm7 { bottom: 16px; right: -16px; }
+        .tm2-pm8 { bottom: -16px; right: 32px; }
+        .tm2-pm9 { bottom: -16px; left: 32px; }
+        .tm2-pm10 { bottom: 16px; left: -16px; }
+        .tm2-llc { top: 16px; left: -16px; }
+        .tm2-lld { top: -16px; left: 32px; }
+
+        /* TM3周围的腔室位置 (正八边形顶点) */
+        .tm3-llc { top: -16px; left: 64px; }
+        .tm3-lld { top: 16px; right: -16px; }
+        .tm3-pm1 { bottom: 16px; right: -16px; }
+        .tm3-pm2 { bottom: -16px; right: 32px; }
+        .tm3-pm3 { bottom: -16px; left: 32px; }
+        .tm3-pm4 { bottom: 16px; left: -16px; }
+        .tm3-pm5 { top: 16px; left: -16px; }
+        .tm3-pm6 { top: -16px; left: 32px; }
+
+        /* 腔室状态颜色 */
+        .chamber-idle { 
+            background: linear-gradient(135deg, #10b981, #059669);
+            box-shadow: 0 4px 15px rgba(16, 185, 129, 0.4);
+        }
+        .chamber-processing { 
+            background: linear-gradient(135deg, #f59e0b, #d97706);
+            box-shadow: 0 4px 15px rgba(245, 158, 11, 0.4);
+            animation: processing 2s ease-in-out infinite alternate;
+        }
+        .chamber-loading { 
+            background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+            box-shadow: 0 4px 15px rgba(59, 130, 246, 0.4);
+        }
+        .chamber-unloading { 
+            background: linear-gradient(135deg, #8b5cf6, #7c3aed);
+            box-shadow: 0 4px 15px rgba(139, 92, 246, 0.4);
+        }
+
+        @keyframes processing {
+            0% { box-shadow: 0 4px 15px rgba(245, 158, 11, 0.4); }
+            100% { box-shadow: 0 8px 25px rgba(245, 158, 11, 0.8); }
+        }
+
+        /* 晶圆动画 */
+        .wafer {
+            position: absolute;
+            width: 10px;
+            height: 10px;
+            background: radial-gradient(circle, #fbbf24, #f59e0b);
+            border-radius: 50%;
+            box-shadow: 0 0 15px rgba(251, 191, 36, 0.8);
+            animation: waferGlow 2s ease-in-out infinite alternate;
+        }
+
+        @keyframes waferGlow {
+            0% { box-shadow: 0 0 15px rgba(251, 191, 36, 0.8); }
+            100% { box-shadow: 0 0 25px rgba(251, 191, 36, 1); }
+        }
+
+        /* 状态面板 */
+        .status-panel {
+            position: absolute;
+            bottom: 15px;
+            left: 15px;
+            right: 15px;
+            background: rgba(15, 23, 42, 0.95);
+            border-radius: 12px;
+            padding: 15px;
+            color: white;
+            font-size: 11px;
+            border: 1px solid rgba(148, 163, 184, 0.3);
+        }
+
+        .status-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+        }
+
+        .status-row:last-child {
+            margin-bottom: 0;
+        }
+
+        /* 图例面板 */
+        .legend-title {
+            font-size: 1.4em;
+            font-weight: 700;
+            margin-bottom: 25px;
+            color: #ffffff;
+            text-align: center;
+            background: linear-gradient(135deg, #00d4ff, #7c3aed);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .legend-section {
+            margin-bottom: 25px;
+        }
+
+        .legend-section h3 {
+            font-size: 1.1em;
+            font-weight: 600;
+            color: #e8eaed;
+            margin-bottom: 15px;
+            border-bottom: 1px solid rgba(148, 163, 184, 0.3);
+            padding-bottom: 8px;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            margin-bottom: 12px;
+            padding: 8px;
+            border-radius: 8px;
+            transition: background 0.3s ease;
+        }
+
+        .legend-item:hover {
+            background: rgba(148, 163, 184, 0.1);
+        }
+
+        .legend-color {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            margin-right: 12px;
+            border: 2px solid rgba(255,255,255,0.2);
+        }
+
+        .legend-text {
+            font-size: 13px;
+            color: #d1d5db;
+        }
+
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 30px;
+        }
+
+        .metric-card {
+            background: linear-gradient(135deg, rgba(30, 41, 59, 0.95), rgba(51, 65, 85, 0.95));
+            border-radius: 24px;
+            padding: 30px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(148, 163, 184, 0.2);
+            height: 400px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .file-input {
+            margin-bottom: 15px;
+        }
+
+        .frequency-display {
+            font-weight: 700;
+            color: #10b981;
+            background: rgba(16, 185, 129, 0.1);
+            padding: 6px 12px;
+            border-radius: 8px;
+            border: 1px solid rgba(16, 185, 129, 0.3);
+        }
+
+        /* 响应式设计 */
+        @media (max-width: 1400px) {
+            .dashboard {
+                grid-template-columns: 1fr;
+                gap: 20px;
+            }
+            
+            .fab-layout {
+                height: 500px;
+            }
+            
+            .chart-container, .physics-model, .legend-panel, .metric-card {
+                height: auto;
+                min-height: 400px;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .control-row {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            
+            .metrics-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .fab-layout {
+                height: 400px;
+            }
+            
+            .tm2-octagon, .tm3-octagon {
+                width: 120px;
+                height: 120px;
+            }
+            
+            .chamber {
+                width: 24px;
+                height: 24px;
+                font-size: 8px;
+            }
+        }
+
+        /* 滚动条样式 */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: rgba(30, 41, 59, 0.5);
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: linear-gradient(135deg, #00d4ff, #7c3aed);
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: linear-gradient(135deg, #0ea5e9, #8b5cf6);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🚀 强化学习实时可视化分析工具</h1>
+            <p>TM1-TM2-TM3 物理模型 | 实时训练监控 | 高频数据刷新 | 双臂机械臂180°运动 | LLABCD观察</p>
+        </div>
+
+        <div class="control-panel">
+            <div class="control-row">
+                <div class="control-group">
+                    <span class="status-indicator" id="statusIndicator"></span>
+                    <span id="statusText">未连接</span>
+                </div>
+                
+                <div class="control-group">
+                    <button class="btn btn-primary" id="startBtn" onclick="startMonitoring()">开始监控</button>
+                    <button class="btn btn-danger" id="stopBtn" onclick="stopMonitoring()">停止监控</button>
+                </div>
+                
+                <div class="control-group">
+                    <label style="color: #d1d5db;">更新频率:</label>
+                    <input type="range" id="frequencySlider" min="1" max="60" value="15" 
+                           onchange="updateFrequency(this.value)" style="accent-color: #00d4ff;">
+                    <span class="frequency-display" id="frequencyDisplay">15 Hz</span>
+                </div>
+            </div>
+            
+            <div class="control-row">
+                <div class="control-group file-input">
+                    <label style="color: #d1d5db;">加载历史数据:</label>
+                    <input type="file" id="fileInput" accept=".json" onchange="loadHistoryData()" class="input-field">
+                </div>
+            </div>
+        </div>
+
+        <div class="dashboard">
+            <div class="chart-container">
+                <div class="chart-title">📈 训练曲线实时监控</div>
+                <canvas id="trainingChart" style="flex: 1;"></canvas>
+            </div>
+            
+            <div class="physics-model">
+                <div class="chart-title">🏭 TM1-TM2-TM3 晶圆厂物理模型</div>
+                
+                <div class="fab-layout" id="fabLayout">
+                    <!-- TM1 晶圆源 -->
+                    <div class="tm1-container">
+                        <div class="tm1">
+                            <div>TM1</div>
+                            <div>晶圆源</div>
+                        </div>
+                        <div style="margin-top: 8px; font-size: 10px; color: #3b82f6; font-weight: 600;">晶圆产生</div>
+                    </div>
+
+                    <!-- LLA/LLB 连接线 -->
+                    <div class="connection-line lla-llb-line"></div>
+                    <div style="position: absolute; left: 155px; top: 45%; font-size: 10px; color: #9ca3af; font-weight: 600;">LLA/LLB</div>
+
+                    <!-- TM2 正八边形 -->
+                    <div class="tm2-container">
+                        <div class="tm2-octagon">
+                            <div class="tm2-center">
+                                <div>TM2</div>
+                                <div>传输模块</div>
+                            </div>
+                            
+                            <!-- TM2 双臂机械臂 -->
+                            <div class="tm2-robot">
+                                <div class="dual-arm" id="tm2Arm"></div>
+                            </div>
+                        </div>
+                        
+                        <!-- TM2 周围腔室 (正八边形顶点) -->
+                        <div class="chamber chamber-idle tm2-lla" id="lla">LLA</div>
+                        <div class="chamber chamber-idle tm2-llb" id="llb">LLB</div>
+                        <div class="chamber chamber-processing tm2-pm7" id="pm7">PM7</div>
+                        <div class="chamber chamber-idle tm2-pm8" id="pm8">PM8</div>
+                        <div class="chamber chamber-loading tm2-pm9" id="pm9">PM9</div>
+                        <div class="chamber chamber-idle tm2-pm10" id="pm10">PM10</div>
+                        <div class="chamber chamber-idle tm2-llc" id="llc1">LLC</div>
+                        <div class="chamber chamber-idle tm2-lld" id="lld1">LLD</div>
+                    </div>
+
+                    <!-- LLC/LLD 连接线 -->
+                    <div class="connection-line llc-lld-line"></div>
+                    <div style="position: absolute; left: 405px; top: 45%; font-size: 10px; color: #9ca3af; font-weight: 600;">LLC/LLD</div>
+
+                    <!-- TM3 正八边形 -->
+                    <div class="tm3-container">
+                        <div class="tm3-octagon">
+                            <div class="tm3-center">
+                                <div>TM3</div>
+                                <div>处理模块</div>
+                            </div>
+                            
+                            <!-- TM3 双臂机械臂 -->
+                            <div class="tm3-robot">
+                                <div class="dual-arm" id="tm3Arm"></div>
+                            </div>
+                        </div>
+                        
+                        <!-- TM3 周围腔室 (正八边形顶点) -->
+                        <div class="chamber chamber-idle tm3-llc" id="llc2">LLC</div>
+                        <div class="chamber chamber-idle tm3-lld" id="lld2">LLD</div>
+                        <div class="chamber chamber-processing tm3-pm1" id="pm1">PM1</div>
+                        <div class="chamber chamber-idle tm3-pm2" id="pm2">PM2</div>
+                        <div class="chamber chamber-unloading tm3-pm3" id="pm3">PM3</div>
+                        <div class="chamber chamber-idle tm3-pm4" id="pm4">PM4</div>
+                        <div class="chamber chamber-loading tm3-pm5" id="pm5">PM5</div>
+                        <div class="chamber chamber-processing tm3-pm6" id="pm6">PM6</div>
+                    </div>
+
+                    <!-- 状态面板 -->
+                    <div class="status-panel">
+                        <div class="status-row">
+                            <span>TM2 机械臂角度: <span
